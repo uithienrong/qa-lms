@@ -1,49 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
 export async function POST(req: NextRequest) {
   const { description, duration, level, courseName } = await req.json()
-
-  const numWeeks = duration.includes('tuần')
-    ? parseInt(duration)
-    : parseInt(duration) * 4
+  const numWeeks = duration.includes('tuần') ? parseInt(duration) : parseInt(duration) * 4
 
   const prompt = `You are a QA training curriculum designer. Create a detailed course curriculum.
-
 Course description: ${description}
 Duration: ${duration} (${numWeeks} weeks)
 Level: ${level}
 Course name: ${courseName}
+Return ONLY valid JSON, no markdown, no backticks:
+{"courseName":"string","duration":"string","level":"string","totalExercises":0,"weeks":[{"title":"Week N: Topic","topics":["t1","t2","t3","t4"],"exercises":["e1","e2"],"theory_html":"<p>...</p>"}]}`
 
-Return ONLY valid JSON with this structure:
-{
-  "courseName": "string",
-  "duration": "string",
-  "level": "string",
-  "totalExercises": number,
-  "weeks": [
-    {
-      "title": "Week N: Topic Name",
-      "topics": ["topic1","topic2","topic3","topic4"],
-      "exercises": ["exercise1","exercise2"],
-      "theory_html": "<p>Full HTML theory content for this week...</p>"
-    }
-  ]
-}
-
-Create exactly ${numWeeks} week objects. theory_html should be rich HTML with headings, code examples, callouts.`
-
-  const message = await client.messages.create({
-    model: 'claude-opus-4-5',
-    max_tokens: 4096,
-    messages: [{ role: 'user', content: prompt }],
-  })
-
-  const text = (message.content[0] as { text: string }).text
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+  const result = await model.generateContent(prompt)
+  const text = result.response.text()
   const clean = text.replace(/```json|```/g, '').trim()
-  const data = JSON.parse(clean)
-
-  return NextResponse.json(data)
+  return NextResponse.json(JSON.parse(clean))
 }
